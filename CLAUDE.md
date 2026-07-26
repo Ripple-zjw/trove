@@ -45,9 +45,26 @@ trove/
 - 三重安全防线：`timeout` + 输入大小校验 + 异常捕获
 
 ### 通信协议
+
+> axum 0.7 使用 matchit 0.7，路径参数用 `:id` 语法（非 `{id}`，那是 axum 0.8+）
+
 - **REST**: `GET /api/tools` 查询工具列表，`GET /api/tools/:id` 获取元数据，`POST /api/tools/:id/execute` 同步执行
 - **WebSocket**: `WS /api/ws` 支持流式执行和推送
 - **配置**: `GET/PUT /api/config`
+
+### 结果展示模式
+
+CLI 和 Web UI 的结果展示都按工具 ID 做 switch 分发：
+
+- CLI: `format_output()` 在 `crates/cli/src/main.rs`，按 `tool_id` match
+- Web UI: `renderResult()` 在 `gui/src/pages/ToolExecute.tsx`，按 `id` switch
+- 原则：REST API 返回机器可读的结构化 JSON，展示层负责格式化
+
+### 前端枚举选项描述
+
+JSON Schema 不支持 per-enum-item 描述。做法：在前端定义 `ENUM_DESCRIPTIONS` 常量映射，
+渲染 `<select>` 时在 `<option>` 上加 `title` 属性实现 hover 提示。参见
+`gui/src/pages/ToolExecute.tsx` 中的 `ENUM_DESCRIPTIONS`。
 
 ## 开发指南
 
@@ -67,6 +84,20 @@ cargo run -- exec uuid-gen --input '{"count":1}'
 # 构建
 cargo build --release
 ```
+
+## 构建与打包
+
+```bash
+# Tauri 打包（需要先复制 sidecar 二进制）
+bash scripts/copy-sidecar.sh       # 先编译并复制 Core 二进制到 src-tauri/binaries/
+cd gui && npx tauri build          # 再构建 Tauri 安装包
+
+# 产物路径:
+#   gui/src-tauri/target/release/bundle/macos/Trove.app
+#   gui/src-tauri/target/release/bundle/dmg/Trove_0.1.0_aarch64.dmg
+```
+
+> 注意：`gui/src-tauri/` 不是 workspace 成员，它的 `Cargo.toml` 含有独立的 `[workspace]` 表。
 
 ## 添加新工具
 
