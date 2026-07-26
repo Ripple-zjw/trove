@@ -51,6 +51,7 @@ else
   TARGET_NAME="trove-$TARGET_TRIPLE"
 fi
 
+mkdir -p "$TARGET_DIR"
 cp "$SOURCE" "$TARGET_DIR/$TARGET_NAME"
 echo "✅ sidecar 已复制: $TARGET_DIR/$TARGET_NAME"
 echo "   大小: $(du -h "$TARGET_DIR/$TARGET_NAME" | cut -f1)"
