@@ -1,0 +1,110 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+jobs:
+  build-cli:
+    name: Build trove CLI (${{ matrix.target }})
+    strategy:
+      matrix:
+        include:
+          - target: aarch64-apple-darwin
+            os: macos-latest
+            suffix: ''
+          - target: x86_64-apple-darwin
+            os: macos-latest
+            suffix: ''
+          - target: x86_64-unknown-linux-gnu
+            os: ubuntu-latest
+            suffix: ''
+          - target: x86_64-pc-windows-msvc
+            os: windows-latest
+            suffix: '.exe'
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.target }}
+
+      - name: Build release
+        run: cargo build --release --target ${{ matrix.target }}
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: trove-${{ matrix.target }}
+          path: target/${{ matrix.target }}/release/trove${{ matrix.suffix }}
+
+  build-dmg:
+    name: Build Trove.dmg (macOS ARM)
+    runs-on: macos-latest
+    needs: build-cli
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: aarch64-apple-darwin
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Build frontend
+        run: |
+          cd gui && npm install && npm run build
+
+      - name: Build CLI (release)
+        run: |
+          cargo build --release --target aarch64-apple-darwin --bin trove
+
+      - name: Copy sidecar
+        run: |
+          bash scripts/copy-sidecar.sh
+
+      - name: Build Tauri app
+        run: |
+          cd gui && npx tauri build --bundles dmg
+
+      - name: Upload DMG
+        uses: actions/upload-artifact@v4
+        with:
+          name: Trove.dmg
+          path: gui/src-tauri/target/release/bundle/dmg/*.dmg
+
+  release:
+    name: Create Release
+    needs: [build-cli, build-dmg]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Download artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+
+      - name: Create Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ github.ref_name }}
+          name: Trove ${{ github.ref_name }}
+          body_path: CHANGELOG.md
+          files: |
+            artifacts/trove-aarch64-apple-darwin/trove
+            artifacts/trove-x86_64-apple-darwin/trove
+            artifacts/trove-x86_64-unknown-linux-gnu/trove
+            artifacts/trove-x86_64-pc-windows-msvc/trove.exe
+            artifacts/Trove.dmg/Trove_*.dmg
+          draft: false
+          prerelease: false
