@@ -64,7 +64,7 @@ jobs:
 
       - name: Build CLI (release)
         run: |
-          cargo build --release --target aarch64-apple-darwin --bin trove
+          cargo build --release --bin trove
 
       - name: Copy sidecar
         run: |
