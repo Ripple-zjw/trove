@@ -14,6 +14,14 @@ Trove 是一个跨平台工具集合软件，使用 Rust 后端 + React/Tauri �
 | 前端 | **React + Vite + TypeScript** | 生态最大、开发高效 |
 | 通信 | **REST + WebSocket 混合** | REST 控制面，WS 数据面，MCP 对位 |
 
+### 静态文件服务
+
+`trove serve` 启动时会自动查找 `gui/dist/` 提供前端 SPA 页面：
+
+- `/api/*` → REST API（优先匹配）
+- `/assets/*` → JS/CSS 等构建产物
+- `/*` → 所有其他路径返回 index.html（SPA 客户端路由 fallback）
+
 ## 项目结构
 
 ```
@@ -69,10 +77,10 @@ JSON Schema 不支持 per-enum-item 描述。做法：在前端定义 `ENUM_DESC
 ## 开发指南
 
 ```bash
-# 启动后端
+# 启动后端（浏览器打开 http://localhost:8080，需要先 npm run build）
 cargo run -- serve --port 8080
 
-# 启动前端
+# 启动前端（Vite 开发服务器）
 cd gui && npm run dev
 
 # 一键开发环境
@@ -86,6 +94,12 @@ cargo build --release
 ```
 
 ## 构建与打包
+
+> `cargo build` 和 `npx tauri build` 的编译产物在各自的 target 目录中，互不干扰：
+> - `cargo build` → `target/`
+> - `npx tauri build` → `gui/src-tauri/target/`
+>
+> 安装后的 CLI 路径：`/Applications/Trove.app/Contents/MacOS/trove`
 
 ```bash
 # Tauri 打包（需要先复制 sidecar 二进制）
