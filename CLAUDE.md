@@ -40,6 +40,8 @@ trove/
 └── scripts/                # 构建/开发脚本
 ```
 
+完整设计文档见 [`docs/design.md`](docs/design.md)。
+
 ## 核心架构决策
 
 ### Tool Trait 系统
@@ -86,6 +88,10 @@ cd gui && npm run dev
 # 一键开发环境
 bash scripts/dev.sh
 
+# 代码格式化与 lint
+cargo fmt --check              # 检查代码格式
+cargo clippy --all-targets -- -D warnings  # lint 检查（拒绝 warnings）
+
 # 直接 CLI 执行
 cargo run -- exec uuid-gen --input '{"count":1}'
 
@@ -112,6 +118,19 @@ cd gui && npx tauri build          # 再构建 Tauri 安装包
 ```
 
 > 注意：`gui/src-tauri/` 不是 workspace 成员，它的 `Cargo.toml` 含有独立的 `[workspace]` 表。
+
+### CI/CD 自动发布
+
+GitHub Actions 工作流位于 `.github/workflows/release.yml`。触发方式：
+
+```bash
+# 推送标签即可触发自动构建与发布
+git tag v1.0.1
+git push origin v1.0.1
+```
+
+自动构建 4 平台二进制（macOS ARM/x64, Linux x64, Windows x64）+ macOS DMG 安装包，
+产物上传至 GitHub Releases。发布说明需在 `CHANGELOG.md` 中编写。
 
 ## 添加新工具
 
@@ -169,7 +188,9 @@ curl -X POST http://127.0.0.1:8080/api/tools/uuid-gen/execute \
 
 1. ✅ **MVP**: Rust Core + 12 初始工具 + REST API + WS + CLI + React Web UI + Tauri 壳
 2. 📋 **完善**: 30-50 工具，PWA，配置系统，工具分类/搜索/收藏，主题系统
-3. 📋 **高级**: MCP 服务器，移动端，插件系统
+3. 📋 **高级**: MCP 服务器（`crates/mcp-server` 已预留为 stub 骨架）、移动端、插件系统
+
+> 完整架构设计和推演过程见 [`docs/design.md`](docs/design.md)。
 
 ## 网络环境
 
