@@ -39,8 +39,7 @@ impl Tool for UuidGen {
             .get("count")
             .and_then(|v| v.as_i64())
             .unwrap_or(1)
-            .max(1)
-            .min(100) as usize;
+            .clamp(1, 100) as usize;
 
         let uppercase = input
             .get("uppercase")

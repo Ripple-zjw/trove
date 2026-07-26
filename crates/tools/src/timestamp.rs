@@ -39,7 +39,7 @@ impl Tool for TimestampToDate {
             .and_then(|v| v.as_str())
             .or_else(|| input.get("timestamp").and_then(|v| v.as_i64()).map(|n| {
                 // For numeric timestamps, we'll handle below
-                return Box::leak(Box::new(n.to_string())).as_str();
+                Box::leak(Box::new(n.to_string())).as_str()
             }))
             .unwrap_or("")
             .to_string();

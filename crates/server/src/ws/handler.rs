@@ -92,7 +92,7 @@ pub async fn handle_socket(socket: WebSocket, engine: Arc<ExecuteEngine>) {
     // 一个 sender 的任务：从 channel 取结果 → 发送给客户端
     while let Some(response) = result_rx.recv().await {
         let text = serde_json::to_string(&response).unwrap_or_default();
-        if sender.send(Message::Text(text.into())).await.is_err() {
+        if sender.send(Message::Text(text)).await.is_err() {
             break;
         }
     }

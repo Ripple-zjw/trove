@@ -44,8 +44,7 @@ impl Tool for JsonFormatter {
             .get("indent")
             .and_then(|v| v.as_i64())
             .unwrap_or(2)
-            .max(0)
-            .min(8) as usize;
+            .clamp(0, 8) as usize;
 
         let parsed: Value = serde_json::from_str(input_str)
             .map_err(|e| ToolError::InvalidInput(format!("JSON 解析失败: {}", e)))?;

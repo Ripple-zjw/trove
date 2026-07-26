@@ -82,7 +82,7 @@ impl Tool for TextStats {
                 }
             }
             let mut freq_vec: Vec<_> = freq.into_iter().collect();
-            freq_vec.sort_by(|a, b| b.1.cmp(&a.1));
+            freq_vec.sort_by_key(|k| std::cmp::Reverse(k.1));
             let top_words: Vec<Value> = freq_vec.iter().take(50).map(|(w, c)| {
                 json!({ "word": w, "count": c })
             }).collect();
