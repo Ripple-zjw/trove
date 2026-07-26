@@ -14,6 +14,7 @@ package-lock.json
 # Tauri
 gui/src-tauri/target/
 gui/src-tauri/bin/
+gui/src-tauri/binaries/
 
 # IDE
 .vscode/
@@ -35,3 +36,4 @@ build/
 
 # Logs
 *.log
+gui/src-tauri/gen/
