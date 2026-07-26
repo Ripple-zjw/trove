@@ -343,6 +343,277 @@ a { color: inherit; text-decoration: none; }
 
 .copy-btn:hover { color: var(--text); background: var(--bg); }
 
+/* ── Tooltip 和表单提示 ── */
+.required-mark { color: var(--danger); margin-left: 2px; }
+
+.tooltip-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 16px;
+  height: 16px;
+  font-size: 11px;
+  border-radius: 50%;
+  background: var(--border);
+  color: var(--text-secondary);
+  margin-left: 6px;
+  cursor: help;
+  vertical-align: middle;
+}
+
+.enum-hint {
+  font-size: 12px;
+  color: var(--text-secondary);
+  margin-top: 6px;
+  padding: 6px 10px;
+  background: #f0f7ff;
+  border-radius: 4px;
+  border-left: 3px solid var(--accent);
+}
+
+/* ── 结果区域变体 ── */
+.result-success { border-color: var(--success); }
+.result-success .result-header { background: #f0fdf4; }
+.result-success .result-header h3 { color: #166534; }
+
+.result-error { border-color: var(--danger); }
+.result-error .result-header { background: #fef2f2; }
+.result-error .result-header h3 { color: #991b1b; }
+
+/* ── 结果表格 ── */
+.result-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 14px;
+}
+
+.result-table td {
+  padding: 6px 12px;
+  border-bottom: 1px solid var(--border);
+}
+
+.result-table td:first-child {
+  color: var(--text-secondary);
+  font-weight: 500;
+  width: 120px;
+}
+
+.result-table tr:last-child td { border-bottom: none; }
+
+/* ── 错误详情 ── */
+.error-badge {
+  display: inline-block;
+  padding: 4px 12px;
+  background: #fef2f2;
+  border: 1px solid #fecaca;
+  border-radius: 4px;
+  font-size: 13px;
+  color: var(--danger);
+  margin-bottom: 12px;
+}
+
+.error-detail {
+  font-family: "SF Mono", monospace;
+  font-size: 13px;
+  padding: 12px;
+  background: #fef2f2;
+  border-radius: 4px;
+  border: 1px solid #fecaca;
+  white-space: pre-wrap;
+  color: #991b1b;
+}
+
+/* ── 字符格式对比展示 ── */
+.case-badge {
+  display: inline-block;
+  padding: 4px 12px;
+  background: #eff6ff;
+  border: 1px solid #bfdbfe;
+  border-radius: 4px;
+  font-size: 13px;
+  color: #1d4ed8;
+  margin-bottom: 16px;
+}
+
+.case-compare {
+  display: flex;
+  align-items: flex-start;
+  gap: 20px;
+  flex-wrap: wrap;
+}
+
+.case-block { flex: 1; min-width: 200px; }
+
+.case-label {
+  display: block;
+  font-size: 12px;
+  color: var(--text-secondary);
+  margin-bottom: 6px;
+}
+
+.case-value {
+  display: block;
+  padding: 12px;
+  border-radius: var(--radius);
+  font-family: "SF Mono", monospace;
+  font-size: 15px;
+  line-height: 1.5;
+  word-break: break-all;
+}
+
+.case-original {
+  background: var(--bg);
+  border: 1px solid var(--border);
+  color: var(--text-secondary);
+}
+
+.case-converted {
+  background: #f0fdf4;
+  border: 1px solid #bbf7d0;
+  color: #166534;
+  font-weight: 600;
+}
+
+.case-arrow {
+  font-size: 24px;
+  color: var(--text-secondary);
+  padding-top: 28px;
+}
+
+/* ── 时间戳卡片 ── */
+.ts-card {
+  background: linear-gradient(135deg, #eff6ff, #f0fdf4);
+  border-radius: var(--radius);
+  padding: 20px;
+}
+
+.ts-main {
+  font-size: 24px;
+  font-weight: 700;
+  color: var(--text);
+  margin-bottom: 12px;
+}
+
+.ts-meta {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: 13px;
+  color: var(--text-secondary);
+}
+
+.ts-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 12px 16px;
+  background: var(--bg-card);
+  border-radius: var(--radius);
+  margin-bottom: 8px;
+}
+
+.ts-label { font-size: 13px; color: var(--text-secondary); }
+.ts-num { font-family: "SF Mono", monospace; font-size: 18px; font-weight: 600; color: var(--accent); }
+
+/* ── UUID 列表 ── */
+.uuid-list { display: flex; flex-direction: column; gap: 8px; }
+
+.uuid-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 14px;
+  background: var(--bg);
+  border-radius: var(--radius);
+  transition: background 0.15s;
+}
+
+.uuid-item:hover { background: var(--bg-hover); }
+
+.uuid-index {
+  font-size: 12px;
+  color: var(--text-secondary);
+  min-width: 24px;
+}
+
+.uuid-value {
+  flex: 1;
+  font-family: "SF Mono", monospace;
+  font-size: 14px;
+  color: var(--text);
+  user-select: all;
+}
+
+.copy-btn-sm {
+  padding: 2px 8px;
+  font-size: 11px;
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  cursor: pointer;
+  color: var(--text-secondary);
+  opacity: 0;
+  transition: opacity 0.15s;
+}
+
+.uuid-item:hover .copy-btn-sm { opacity: 1; }
+
+/* ── 词频柱状图 ── */
+.freq-list { display: flex; flex-direction: column; gap: 6px; }
+
+.freq-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.freq-word {
+  min-width: 80px;
+  font-size: 13px;
+  text-align: right;
+  color: var(--text);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.freq-bar {
+  height: 18px;
+  background: linear-gradient(90deg, var(--accent), #60a5fa);
+  border-radius: 3px;
+  min-width: 4px;
+  transition: width 0.3s;
+}
+
+.freq-count {
+  font-size: 12px;
+  color: var(--text-secondary);
+  min-width: 24px;
+}
+
+/* ── Hash 展示 ── */
+.result-mono {
+  font-family: "SF Mono", "Fira Code", "Consolas", monospace;
+  font-size: 13px;
+  line-height: 1.6;
+  white-space: pre-wrap;
+  word-break: break-all;
+}
+
+.result-hash {
+  background: var(--bg);
+  padding: 16px;
+  border-radius: var(--radius);
+  font-size: 14px;
+  letter-spacing: 0.05em;
+}
+
+.hash-meta {
+  margin-top: 12px;
+  font-size: 12px;
+  color: var(--text-secondary);
+}
+
 /* 滚动条 */
 ::-webkit-scrollbar { width: 6px; height: 6px; }
 ::-webkit-scrollbar-track { background: transparent; }
