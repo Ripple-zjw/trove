@@ -2,11 +2,16 @@ const API_BASE = import.meta.env.VITE_API_BASE || 'http://127.0.0.1:8080';
 const WS_BASE = API_BASE.replace(/^http/, 'ws');
 
 export interface WsResult {
-  type: 'result' | 'error' | 'pong';
+  type: 'result' | 'error' | 'pong' | 'progress';
   id?: string;
   data?: Record<string, unknown>;
   error?: string;
   code?: number;
+  /** 进度百分比（0.0 ~ 1.0），仅 progress 类型有 */
+  percent?: number;
+  time?: string;
+  frame?: number;
+  speed?: string;
 }
 
 type MessageCallback = (msg: WsResult) => void;
@@ -65,6 +70,12 @@ export class ToolWebSocket {
   send(id: string, input: Record<string, unknown>) {
     if (this.ws?.readyState === WebSocket.OPEN) {
       this.ws.send(JSON.stringify({ type: 'execute', id, input }));
+    }
+  }
+
+  cancel(id: string) {
+    if (this.ws?.readyState === WebSocket.OPEN) {
+      this.ws.send(JSON.stringify({ type: 'cancel', id }));
     }
   }
 }

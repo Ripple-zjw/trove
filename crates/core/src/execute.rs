@@ -75,19 +75,33 @@ impl ExecuteEngine {
                 tool.execute(input, ctx).await
             });
 
-            match timeout(Duration::from_secs(timeout_secs), task).await {
-                Ok(Ok(result)) => result,
-                Ok(Err(join_err)) => {
-                    Err(ToolError::InternalError(format!("任务 panicked: {}", join_err)))
+            if timeout_secs == 0 {
+                // 不超时（用于视频处理等长耗时工具）
+                match task.await {
+                    Ok(result) => result,
+                    Err(join_err) => {
+                        Err(ToolError::InternalError(format!("任务 panicked: {}", join_err)))
+                    }
                 }
-                Err(_elapsed) => Err(ToolError::Timeout(timeout_secs)),
+            } else {
+                match timeout(Duration::from_secs(timeout_secs), task).await {
+                    Ok(Ok(result)) => result,
+                    Ok(Err(join_err)) => {
+                        Err(ToolError::InternalError(format!("任务 panicked: {}", join_err)))
+                    }
+                    Err(_elapsed) => Err(ToolError::Timeout(timeout_secs)),
+                }
             }
         } else {
             // 轻量工具：直接在 async context 中运行
             let fut = tool.execute(input, ctx);
-            match timeout(Duration::from_secs(timeout_secs), fut).await {
-                Ok(result) => result,
-                Err(_elapsed) => Err(ToolError::Timeout(timeout_secs)),
+            if timeout_secs == 0 {
+                fut.await
+            } else {
+                match timeout(Duration::from_secs(timeout_secs), fut).await {
+                    Ok(result) => result,
+                    Err(_elapsed) => Err(ToolError::Timeout(timeout_secs)),
+                }
             }
         }
     }

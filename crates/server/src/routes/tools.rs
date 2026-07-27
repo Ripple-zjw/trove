@@ -79,6 +79,12 @@ async fn execute_tool(
     }
 }
 
+/// 检测 ffmpeg 信息（用于视频相关工具的前置检查）
+async fn video_concat_deps() -> Json<Value> {
+    let info = trove_tools::ffmpeg_detector::detect_ffmpeg();
+    Json(serde_json::to_value(info).unwrap_or_default())
+}
+
 /// WebSocket 端点 - 升级连接
 async fn ws_handler(
     ws: WebSocketUpgrade,
@@ -90,6 +96,8 @@ async fn ws_handler(
 pub fn routes() -> Router<Arc<AppState>> {
     Router::new()
         .route("/tools", get(list_tools))
+        // 具体路径必须在 :id 参数匹配之前注册
+        .route("/tools/video-concat/deps", get(video_concat_deps))
         .route("/tools/:id", get(get_tool))
         .route("/tools/:id/execute", post(execute_tool))
         .route("/ws", get(ws_handler))

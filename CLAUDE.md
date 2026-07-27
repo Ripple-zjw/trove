@@ -68,6 +68,15 @@ CLI 和 Web UI 的结果展示都按工具 ID 做 switch 分发：
 - Web UI: `renderResult()` 在 `gui/src/pages/ToolExecute.tsx`，按 `id` switch
 - 原则：REST API 返回机器可读的结构化 JSON，展示层负责格式化
 
+### 新工具：video-concat（视频拼接）
+
+视频拼接工具使用系统 ffmpeg，支持同格式流拷贝和跨格式重编码两种策略。
+需要 `Media` 工具分类（位于 `Image` 和 `Utility` 之间）。
+详情见 [`docs/video-concat.md`](docs/video-concat.md)。
+
+进度推送和取消机制通过 `ToolContext.progress_tx` / `ToolContext.cancel_token` 实现，
+设计决策见 [`docs/adr/0001-progress-and-cancel.md`](docs/adr/0001-progress-and-cancel.md)。
+
 ### 前端枚举选项描述
 
 JSON Schema 不支持 per-enum-item 描述。做法：在前端定义 `ENUM_DESCRIPTIONS` 常量映射，
@@ -136,7 +145,7 @@ curl -X POST http://127.0.0.1:8080/api/tools/uuid-gen/execute \
 
 ### Rust (Cargo workspace)
 - `crates/core`: tokio, serde, serde_json, async-trait, thiserror
-- `crates/tools`: uuid, chrono, base64, blake3
+- `crates/tools`: uuid, chrono, base64, blake3, tokio, dirs
 - `crates/server`: axum (ws), tower-http (cors)
 - `crates/cli`: clap
 
@@ -167,7 +176,7 @@ curl -X POST http://127.0.0.1:8080/api/tools/uuid-gen/execute \
 
 ## 实现阶段
 
-1. ✅ **MVP**: Rust Core + 12 初始工具 + REST API + WS + CLI + React Web UI + Tauri 壳
+1. ✅ **MVP**: Rust Core + 13 初始工具 + REST API + WS + CLI + React Web UI + Tauri 壳
 2. 📋 **完善**: 30-50 工具，PWA，配置系统，工具分类/搜索/收藏，主题系统
 3. 📋 **高级**: MCP 服务器，移动端，插件系统
 
