@@ -5,6 +5,7 @@ use serde_json::{json, Value};
 use tokio::io::{AsyncBufReadExt, BufReader};
 use tokio::process::Command;
 
+use tracing::{info, warn};
 use trove_core::{CancelToken, Tool, ToolCategory, ToolContext, ToolError, ToolResult, ProgressEvent};
 use crate::ffmpeg_detector;
 
@@ -22,7 +23,7 @@ impl Tool for VideoConcat {
     }
 
     fn description(&self) -> &'static str {
-        "将多个视频文件拼接成一个视频文件。自动检测 ffmpeg 并选择最优策略：同格式流拷贝（无损、极快），不同格式 H.264 重编码。"
+        "将多个视频文件拼接成一个视频文件。需要系统中已安装 ffmpeg。自动检测并选择最优策略：同格式流拷贝（无损、极快），不同格式 H.264 重编码。"
     }
 
     fn input_schema(&self) -> Value {
@@ -39,7 +40,21 @@ impl Tool for VideoConcat {
                 "output": {
                     "type": "string",
                     "title": "输出路径（可选）",
-                    "description": "输出文件路径，默认为 ~/Downloads/video_concat_<时间戳>.mp4"
+                    "description": "输出文件路径，默认为 ~/Downloads/video_concat_<时间戳>.<格式扩展名>"
+                },
+                "output_format": {
+                    "type": "string",
+                    "title": "输出格式",
+                    "description": "视频容器格式",
+                    "enum": ["mp4", "mov", "mkv", "webm", "avi"],
+                    "default": "mp4"
+                },
+                "resolution": {
+                    "type": "string",
+                    "title": "分辨率",
+                    "description": "输出视频分辨率（仅重编码模式生效）",
+                    "enum": ["original", "1080p", "720p", "480p", "360p"],
+                    "default": "original"
                 },
                 "quality": {
                     "type": "string",
@@ -62,7 +77,9 @@ impl Tool for VideoConcat {
 
     async fn execute(&self, input: Value, ctx: ToolContext) -> ToolResult<Value> {
         let files = parse_files(&input)?;
-        let output = determine_output(&input)?;
+        let output_format = parse_output_format(&input);
+        let resolution = parse_resolution(&input);
+        let output = determine_output(&input, output_format)?;
         let quality = parse_quality(&input);
         let crf = quality_crf(quality);
 
@@ -81,20 +98,41 @@ impl Tool for VideoConcat {
 
         // 检测容器格式是否一致
         let all_same = all_same_container(&files);
-        let strategy = if all_same { "stream-copy" } else { "re-encode" };
 
         let ffmpeg_path = &ffmpeg_info.path;
         let cancel = ctx.cancel_token.clone();
         let progress_tx = ctx.progress_tx.clone();
 
-        let result = if all_same {
-            run_concat_demuxer(ffmpeg_path, &files, &output, cancel.as_ref()).await
-        } else {
-            run_concat_filter(
-                ffmpeg_path, &files, &output, crf,
+        // 尝试流拷贝，失败则自动降级为重编码
+        let mut strategy = "re-encode";
+        let mut result = Err(ToolError::ExecutionError("未执行".to_string()));
+
+        if all_same && resolution == "original" {
+            info!("[video-concat] 尝试流拷贝模式...");
+            let demux_result = run_concat_demuxer(
+                ffmpeg_path, &files, &output, output_format, cancel.as_ref()
+            ).await;
+            match &demux_result {
+                Ok(()) => {
+                    strategy = "stream-copy";
+                    result = Ok(());
+                }
+                Err(e) => {
+                    warn!(
+                        "[video-concat] 流拷贝失败（编码参数可能不一致）: {}，自动降级为重编码",
+                        e
+                    );
+                }
+            }
+        }
+
+        if result.is_err() {
+            info!("[video-concat] 使用重编码模式...");
+            result = run_concat_filter(
+                ffmpeg_path, &files, &output, crf, output_format, resolution,
                 progress_tx.as_ref(), cancel.as_ref(),
-            ).await
-        };
+            ).await;
+        }
 
         match result {
             Ok(()) => {
@@ -168,24 +206,39 @@ fn parse_files(input: &Value) -> ToolResult<Vec<String>> {
     Ok(files)
 }
 
-fn determine_output(input: &Value) -> ToolResult<String> {
+fn parse_output_format(input: &Value) -> &str {
+    input
+        .get("output_format")
+        .and_then(|v| v.as_str())
+        .unwrap_or("mp4")
+}
+
+fn parse_resolution(input: &Value) -> &str {
+    input
+        .get("resolution")
+        .and_then(|v| v.as_str())
+        .unwrap_or("original")
+}
+
+fn determine_output(input: &Value, output_format: &str) -> ToolResult<String> {
     if let Some(out) = input.get("output").and_then(|v| v.as_str()) {
         if !out.is_empty() {
             return Ok(out.to_string());
         }
     }
 
-    let download_dir = dirs::download_dir()
-        .or_else(dirs::home_dir)
-        .unwrap_or_else(|| std::path::PathBuf::from("."));
+    let tmp_dir = std::env::temp_dir().join("trove_uploads");
+    // 确保目录存在
+    let _ = std::fs::create_dir_all(&tmp_dir);
 
     let timestamp = std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)
-        .map(|d| d.as_secs())
+        .map(|d| d.as_nanos())
         .unwrap_or(0);
 
-    let default_name = format!("video_concat_{}.mp4", timestamp);
-    Ok(download_dir.join(default_name).to_string_lossy().to_string())
+    let ext = if output_format.is_empty() { "mp4" } else { output_format };
+    let default_name = format!("video_concat_{}.{}", timestamp, ext);
+    Ok(tmp_dir.join(default_name).to_string_lossy().to_string())
 }
 
 fn parse_quality(input: &Value) -> &str {
@@ -228,6 +281,7 @@ async fn run_concat_demuxer(
     ffmpeg_path: &str,
     files: &[String],
     output: &str,
+    _output_format: &str,
     cancel: Option<&CancelToken>,
 ) -> ToolResult<()> {
     // 创建临时文件列表
@@ -281,6 +335,8 @@ async fn run_concat_filter(
     files: &[String],
     output: &str,
     crf: u32,
+    output_format: &str,
+    resolution: &str,
     progress_tx: Option<&tokio::sync::mpsc::UnboundedSender<ProgressEvent>>,
     cancel: Option<&CancelToken>,
 ) -> ToolResult<()> {
@@ -293,24 +349,64 @@ async fn run_concat_filter(
     }
 
     // 构建 filter_complex: [0:v][0:a][1:v][1:a]...concat=n=N:v=1:a=1
+    // 如果指定了分辨率，在 concat 后加 scale 滤镜
     let mut filter = String::new();
     for i in 0..n {
         filter.push_str(&format!("[{}:v][{}:a]", i, i));
     }
     filter.push_str(&format!("concat=n={}:v=1:a=1", n));
 
+    // 分辨率缩放
+    let scale_filter = match resolution {
+        "1080p" => ",scale=1920:1080:force_original_aspect_ratio=decrease,pad=1920:1080:(ow-iw)/2:(oh-ih)/2",
+        "720p" => ",scale=1280:720:force_original_aspect_ratio=decrease,pad=1280:720:(ow-iw)/2:(oh-ih)/2",
+        "480p" => ",scale=854:480:force_original_aspect_ratio=decrease,pad=854:480:(ow-iw)/2:(oh-ih)/2",
+        "360p" => ",scale=640:360:force_original_aspect_ratio=decrease,pad=640:360:(ow-iw)/2:(oh-ih)/2",
+        _ => "",
+    };
+    filter.push_str(scale_filter);
+
     args.push("-filter_complex".to_string());
     args.push(filter);
+
+    // 视频编码器
+    let vcodec = match output_format {
+        "webm" => "libvpx",
+        _ => "libx264",
+    };
     args.push("-c:v".to_string());
-    args.push("libx264".to_string());
-    args.push("-crf".to_string());
-    args.push(crf.to_string());
-    args.push("-preset".to_string());
-    args.push("medium".to_string());
+    args.push(vcodec.to_string());
+
+    // webm 用不同质量参数
+    if output_format == "webm" {
+        args.push("-b:v".to_string());
+        args.push(match crf {
+            18 => "4M",
+            23 => "2M",
+            _ => "1M",
+        }.to_string());
+    } else {
+        args.push("-crf".to_string());
+        args.push(crf.to_string());
+        args.push("-preset".to_string());
+        args.push("medium".to_string());
+    }
+
+    // 音频编码器
     args.push("-c:a".to_string());
-    args.push("aac".to_string());
+    match output_format {
+        "webm" => { args.push("libvorbis".to_string()); }
+        _ => { args.push("aac".to_string()); }
+    }
     args.push("-b:a".to_string());
     args.push("192k".to_string());
+
+    // 输出格式指定
+    if output_format == "mp4" || output_format == "mov" || output_format == "m4v" {
+        args.push("-movflags".to_string());
+        args.push("+faststart".to_string());
+    }
+
     args.push("-y".to_string());
     args.push(output.to_string());
 

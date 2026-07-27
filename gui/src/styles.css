@@ -639,22 +639,100 @@ a { color: inherit; text-decoration: none; }
   color: #991b1b;
 }
 
+/* 文件列表头部 */
+.file-list-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 8px;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.file-toolbar {
+  display: flex;
+  gap: 4px;
+  flex-wrap: wrap;
+}
+
 /* 文件列表 */
 .file-list {
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: 4px;
   margin-bottom: 8px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  min-height: 48px;
+}
+.file-list-empty {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 60px;
+  cursor: pointer;
+  color: var(--text-secondary);
+  font-size: 13px;
+  border-radius: var(--radius);
+}
+.file-list-empty:hover {
+  background: var(--bg-hover);
+}
+.file-list-dropzone {
+  border: 2px dashed var(--accent) !important;
+  background: #eff6ff;
 }
 .file-list-item {
   display: flex;
   gap: 6px;
   align-items: center;
+  padding: 6px 10px;
+  border-bottom: 1px solid var(--border);
+  background: var(--bg-card);
+  transition: background 0.15s;
+  user-select: none;
 }
-.file-list-item .form-input {
+.file-list-item:last-child {
+  border-bottom: none;
+}
+.file-list-item:hover {
+  background: var(--bg-hover);
+}
+.file-list-item.dragging {
+  opacity: 0.5;
+  background: var(--bg-hover);
+}
+.file-list-item.drag-over {
+  border-top: 2px solid var(--accent);
+}
+.file-drag-handle {
+  cursor: grab;
+  color: var(--text-secondary);
+  font-size: 16px;
+  padding: 0 2px;
+  flex-shrink: 0;
+}
+.file-index {
+  color: var(--text-secondary);
+  font-size: 12px;
+  min-width: 24px;
+  flex-shrink: 0;
+}
+.file-name {
   flex: 1;
+  font-size: 13px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
-.file-list-item .btn-sm,
+.file-size {
+  color: var(--text-secondary);
+  font-size: 11px;
+  min-width: 60px;
+  text-align: right;
+  flex-shrink: 0;
+}
+
+/* 通用按钮（小尺寸） */
 .btn-sm {
   padding: 4px 10px;
   font-size: 12px;
@@ -675,23 +753,54 @@ a { color: inherit; text-decoration: none; }
   background: #fef2f2;
 }
 
+/* 表单行（多列并排） */
+.form-row-group {
+  padding: 0;
+}
+.form-row {
+  display: flex;
+  gap: 16px;
+  flex-wrap: wrap;
+}
+.form-row-item {
+  flex: 1;
+  min-width: 140px;
+}
+
 /* 进度条 */
 .progress-bar-container {
+  position: relative;
   width: 100%;
-  height: 20px;
+  height: 24px;
   background: var(--border);
-  border-radius: 10px;
+  border-radius: 12px;
   overflow: hidden;
 }
 .progress-bar-fill {
   height: 100%;
   background: linear-gradient(90deg, var(--accent), #6366f1);
-  border-radius: 10px;
+  border-radius: 12px;
   transition: width 0.3s ease;
 }
-.progress-text {
-  margin-top: 8px;
-  font-size: 13px;
+.progress-bar-label {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 12px;
+  font-weight: 600;
+  color: white;
+  text-shadow: 0 1px 2px rgba(0,0,0,0.3);
+}
+.progress-details {
+  margin-top: 10px;
+  display: flex;
+  gap: 16px;
+  font-size: 12px;
   color: var(--text-secondary);
 }
 
@@ -699,4 +808,120 @@ a { color: inherit; text-decoration: none; }
   margin-top: 4px;
   font-size: 12px;
   color: var(--text-secondary);
+}
+
+/* ─── 去重弹窗 ─── */
+.modal-overlay {
+  position: fixed;
+  top: 0; left: 0; right: 0; bottom: 0;
+  background: rgba(0,0,0,0.4);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+}
+.modal-box {
+  background: var(--bg-card);
+  border-radius: 12px;
+  padding: 24px 28px;
+  max-width: 440px;
+  width: 90%;
+  box-shadow: var(--shadow-lg);
+}
+.modal-title {
+  font-size: 16px;
+  font-weight: 600;
+  margin-bottom: 12px;
+}
+.modal-desc {
+  font-size: 13px;
+  color: var(--text-secondary);
+  margin-bottom: 8px;
+}
+.modal-dup-list {
+  margin: 0 0 16px 0;
+  padding-left: 20px;
+  font-size: 13px;
+  color: var(--danger);
+  max-height: 120px;
+  overflow-y: auto;
+}
+.modal-dup-list li {
+  margin-bottom: 2px;
+  word-break: break-all;
+}
+.modal-actions {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+
+/* ─── 输出路径 ─── */
+.output-path-row {
+  display: flex;
+  gap: 6px;
+}
+.output-path-row .form-input {
+  flex: 1;
+}
+
+/* ─── 目录浏览器 ─── */
+.dir-browser {
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 10px;
+  background: var(--bg);
+}
+.dir-browser-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-bottom: 8px;
+  padding-bottom: 8px;
+  border-bottom: 1px solid var(--border);
+}
+.dir-browser-path {
+  font-size: 13px;
+  color: var(--text);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-width: 300px;
+}
+.dir-browser-actions {
+  display: flex;
+  gap: 4px;
+}
+.dir-browser-list {
+  max-height: 180px;
+  overflow-y: auto;
+}
+.dir-browser-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 5px 8px;
+  font-size: 13px;
+  cursor: pointer;
+  border-radius: 4px;
+}
+.dir-browser-item:hover {
+  background: var(--bg-hover);
+}
+.dir-browser-item.is-dir {
+  font-weight: 500;
+}
+.dir-browser-item.is-file {
+  color: var(--text-secondary);
+}
+.dir-browser-icon {
+  flex-shrink: 0;
+}
+.dir-browser-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }

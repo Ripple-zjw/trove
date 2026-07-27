@@ -3,6 +3,8 @@ import { useParams, Link } from 'react-router-dom';
 import { fetchTool, executeTool, ToolMetadata } from '../api/rest';
 import { ToolWebSocket, WsResult } from '../api/ws';
 
+const API_BASE = import.meta.env.VITE_API_BASE || 'http://127.0.0.1:8080';
+
 // ── 工具 ID 常量 ──
 const TOOL_IDS = {
   JSON_FORMAT: 'json-format',
@@ -51,7 +53,29 @@ export default function ToolExecute(): React.ReactElement | null {
 
   // ── video-concat 特有状态 ──
   const [ffmpegInfo, setFfmpegInfo] = useState<Record<string, unknown> | null>(null);
-  const [filePaths, setFilePaths] = useState<string[]>(['']);
+  const [ffmpegInfoError, setFfmpegInfoError] = useState(false);
+
+  interface FileEntry {
+    id: number;
+    name: string;
+    path: string;
+    size: number;
+    uploadedAt: number;
+    uploading?: boolean;
+  }
+  const [fileEntries, setFileEntries] = useState<FileEntry[]>([]);
+  const fileIdCounter = useRef(0);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const [dragIdx, setDragIdx] = useState<number | null>(null);
+  const [dragOverIdx, setDragOverIdx] = useState<number | null>(null);
+  const [dragOverContainer, setDragOverContainer] = useState(false);
+  // 去重弹窗状态
+  const [dupDialog, setDupDialog] = useState<{ files: File[]; names: string[] } | null>(null);
+  // 下载状态
+  const [downloading, setDownloading] = useState(false);
+  const [sortBy, setSortBy] = useState<'name' | 'size' | 'time' | null>(null);
+  const [sortAsc, setSortAsc] = useState(true);
+
   const [wsProgress, setWsProgress] = useState<number>(0);
   const [wsTime, setWsTime] = useState('');
   const [wsSpeed, setWsSpeed] = useState('');
@@ -72,10 +96,15 @@ export default function ToolExecute(): React.ReactElement | null {
 
     // 视频拼接工具：检测 ffmpeg
     if (id === TOOL_IDS.VIDEO_CONCAT) {
-      fetch('/api/tools/video-concat/deps')
+      fetch(`${API_BASE}/api/tools/video-concat/deps`)
         .then(r => r.json())
-        .then(info => setFfmpegInfo(info as Record<string, unknown>))
-        .catch(() => setFfmpegInfo({ available: false }));
+        .then(info => {
+          setFfmpegInfo(info as Record<string, unknown>);
+          setFfmpegInfoError(false);
+        })
+        .catch(() => {
+          setFfmpegInfoError(true);
+        });
     }
   }, [id]);
 
@@ -383,98 +412,367 @@ export default function ToolExecute(): React.ReactElement | null {
     }
   }
 
+  // ── 文件操作 ────────────────────────────────
+
+  /** 上传单个文件到后端 */
+  async function uploadFile(file: File): Promise<FileEntry | null> {
+    const formData = new FormData();
+    formData.append('file', file, file.name);
+    try {
+      const res = await fetch(`${API_BASE}/api/upload`, {
+        method: 'POST',
+        body: formData,
+      });
+      if (!res.ok) {
+        const errText = await res.text();
+        throw new Error(errText || `HTTP ${res.status}`);
+      }
+      const data = await res.json() as { path: string; name: string; size: number };
+      return {
+        id: ++fileIdCounter.current,
+        name: data.name,
+        path: data.path,
+        size: data.size,
+        uploadedAt: Date.now(),
+      };
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : String(e);
+      console.error(`上传 "${file.name}" 失败:`, e);
+      setExecError(`上传文件 "${file.name}" 失败: ${msg}`);
+      return null;
+    }
+  }
+
+  /** 上传多个文件 */
+  async function uploadFiles(files: FileList | File[], skipDuplicates: boolean = false) {
+    const existingNames = new Set(fileEntries.map(e => e.name));
+    const fileArr = Array.from(files);
+    const dupNames: string[] = [];
+    const unique: File[] = [];
+
+    for (const f of fileArr) {
+      if (existingNames.has(f.name)) {
+        dupNames.push(f.name);
+      } else {
+        unique.push(f);
+      }
+    }
+
+    // 有重复文件，且未决定跳过
+    if (dupNames.length > 0 && !skipDuplicates) {
+      setDupDialog({ files: fileArr, names: dupNames });
+      return;
+    }
+
+    // 跳过重复，只上传不重复的
+    const toUpload = skipDuplicates ? unique : fileArr;
+
+    const newEntries: FileEntry[] = [];
+    for (const f of toUpload) {
+      const entry = await uploadFile(f);
+      if (entry) newEntries.push(entry);
+    }
+    if (newEntries.length > 0) {
+      setFileEntries(prev => [...prev, ...newEntries]);
+    }
+    setDupDialog(null);
+  }
+
+  /** 打开文件选择器 */
+  function handlePickFiles() {
+    const input = document.createElement('input');
+    input.type = 'file';
+    input.multiple = true;
+    input.accept = 'video/*,.mp4,.mov,.mkv,.webm,.avi,.flv,.wmv';
+    input.onchange = async () => {
+      if (input.files && input.files.length > 0) {
+        await uploadFiles(input.files);
+      }
+    };
+    input.click();
+  }
+
+  /** 拖拽事件：阻止浏览器默认行为 */
+  function handleDragOver(e: React.DragEvent) {
+    e.preventDefault();
+    e.stopPropagation();
+    e.dataTransfer.dropEffect = 'copy';
+    setDragOverContainer(true);
+  }
+
+  /** 拖拽离开容器 */
+  function handleDragLeave(e: React.DragEvent) {
+    e.preventDefault();
+    e.stopPropagation();
+    setDragOverContainer(false);
+  }
+
+  /** 拖拽放入文件 */
+  function handleDrop(e: React.DragEvent) {
+    e.preventDefault();
+    e.stopPropagation();
+    setDragOverContainer(false);
+    if (e.dataTransfer.files && e.dataTransfer.files.length > 0) {
+      uploadFiles(e.dataTransfer.files);
+    }
+  }
+
+  /** 排序文件 */
+  function sortFiles(by: 'name' | 'size' | 'time') {
+    const sorted = [...fileEntries];
+    if (by === sortBy) {
+      // 切换升降序
+      sorted.reverse();
+      setSortAsc(!sortAsc);
+    } else {
+      sorted.sort((a, b) => {
+        if (by === 'name') return a.name.localeCompare(b.name);
+        if (by === 'size') return a.size - b.size;
+        return a.uploadedAt - b.uploadedAt;
+      });
+      setSortBy(by);
+      setSortAsc(true);
+    }
+    setFileEntries(sorted);
+  }
+
+  /** 下载文件到用户本地 */
+  async function downloadOutput(outputPath: string, fileName: string) {
+    setDownloading(true);
+    try {
+      const res = await fetch(`${API_BASE}/api/download?path=${encodeURIComponent(outputPath)}`);
+      if (!res.ok) throw new Error('下载失败');
+      const blob = await res.blob();
+
+      // 优先使用 showSaveFilePicker API
+      if ('showSaveFilePicker' in window) {
+        const handle = await (window as any).showSaveFilePicker({
+          suggestedName: fileName,
+          types: [{
+            description: '视频文件',
+            accept: { 'video/mp4': ['.mp4'], 'video/quicktime': ['.mov'], 'video/x-matroska': ['.mkv'], 'video/webm': ['.webm'] },
+          }],
+        });
+        const writable = await handle.createWritable();
+        await writable.write(blob);
+        await writable.close();
+      } else {
+        // 回退：触发浏览器默认下载
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = fileName;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        URL.revokeObjectURL(url);
+        setTimeout(() => URL.revokeObjectURL(url), 1000);
+      }
+    } catch (e) {
+      if ((e as Error).name !== 'AbortError') {
+        setExecError(`下载失败: ${(e as Error).message}`);
+      }
+    } finally {
+      setDownloading(false);
+    }
+  }
+
+  /** 格式化文件大小 */
+  function formatSize(bytes: number): string {
+    if (bytes === 0) return '—';
+    if (bytes < 1024) return `${bytes} B`;
+    if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+    return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+  }
+
   // ═══════════════════════════════════════
   //  video-concat 表单
   // ═══════════════════════════════════════
   function renderVideoConcatForm() {
     const quality = (formValues['quality'] as string) || 'medium';
-    const output = (formValues['output'] as string) || '';
+    const outputFormat = (formValues['output_format'] as string) || 'mp4';
+    const resolution = (formValues['resolution'] as string) || 'original';
+
+    const ffmpegStatus = () => {
+      if (ffmpegInfoError) return <span className="ffmpeg-badge unavailable">⚠️ 无法检测 ffmpeg（服务器 API 不可用）</span>;
+      if (ffmpegInfo === null) return <span className="ffmpeg-badge" style={{ opacity: 0.5 }}>⏳ 检测中...</span>;
+      if (ffmpegInfo?.available) {
+        return (
+          <>
+            <span className="ffmpeg-badge available">✅ ffmpeg 已就绪 — {ffmpegInfo.version as string || ''}</span>
+            <p className="form-hint">路径：{ffmpegInfo.path as string}</p>
+            <p className="form-hint">本工具依赖系统中的 ffmpeg。不同格式的视频拼接时自动转码为 H.264（推荐），同格式则使用流拷贝（无损）。</p>
+          </>
+        );
+      }
+      return (
+        <>
+          <span className="ffmpeg-badge unavailable">❌ 系统中未找到 ffmpeg</span>
+          <p className="form-hint" style={{ marginTop: 6 }}>
+            本工具需要 ffmpeg 来处理视频。请安装：<br />
+            macOS：<code>brew install ffmpeg</code><br />
+            Ubuntu：<code>sudo apt install ffmpeg</code><br />
+            Windows：<code>choco install ffmpeg</code><br />
+            或设置 <code>FFMPEG_PATH</code> 环境变量指定自定义路径。
+          </p>
+        </>
+      );
+    };
 
     return (
       <>
-        {/* ffmpeg 状态面板 */}
+        {/* ffmpeg 依赖说明 */}
         <div className="form-group">
-          <label className="form-label">🎥 ffmpeg 状态</label>
-          <div className={`ffmpeg-badge ${ffmpegInfo?.available ? 'available' : 'unavailable'}`}>
-            {ffmpegInfo === null ? '检测中...' :
-              ffmpegInfo?.available
-                ? `✅ 已就绪 — ${ffmpegInfo.version as string || ''}`
-                : '❌ 未找到 ffmpeg（请先安装）'}
-          </div>
-          {ffmpegInfo && (ffmpegInfo.available as boolean) && (ffmpegInfo.path as string) && (
-            <p className="form-hint">路径：{ffmpegInfo.path as string}</p>
-          )}
+          <label className="form-label">🎥 依赖检查</label>
+          {ffmpegStatus()}
         </div>
 
-        {/* 文件列表 */}
+        {/* 文件选择区 */}
         <div className="form-group">
-          <label className="form-label">📁 视频文件列表 <span className="required-mark">*</span></label>
-          <div className="file-list">
-            {filePaths.map((fp, i) => (
-              <div key={i} className="file-list-item">
-                <input
-                  type="text"
-                  className="form-input"
-                  placeholder={`视频文件 ${i + 1} 的路径`}
-                  value={fp}
-                  onChange={e => {
-                    const newList = [...filePaths];
-                    newList[i] = e.target.value;
-                    setFilePaths(newList);
-                  }}
-                />
+          <div className="file-list-header">
+            <label className="form-label" style={{ marginBottom: 0 }}>📁 视频文件列表 <span className="required-mark">*</span></label>
+            <div className="file-toolbar">
+              <button className="btn-sm" onClick={handlePickFiles}>📂 选择文件</button>
+              {fileEntries.length > 1 && (
+                <>
+                  <button className="btn-sm" onClick={() => sortFiles('name')}>
+                    按名称{sortBy === 'name' ? (sortAsc ? '↑' : '↓') : ''}
+                  </button>
+                  <button className="btn-sm" onClick={() => sortFiles('size')}>
+                    按大小{sortBy === 'size' ? (sortAsc ? '↑' : '↓') : ''}
+                  </button>
+                  <button className="btn-sm" onClick={() => sortFiles('time')}>
+                    按时间{sortBy === 'time' ? (sortAsc ? '↑' : '↓') : ''}
+                  </button>
+                </>
+              )}
+            </div>
+          </div>
+
+          <div
+            className={`file-list ${dragOverContainer ? 'file-list-dropzone' : ''}`}
+            onDragOver={handleDragOver}
+            onDragLeave={handleDragLeave}
+            onDrop={handleDrop}
+          >
+            {fileEntries.length === 0 && (
+              <div className="file-list-empty" onClick={handlePickFiles}>
+                📂 拖拽视频文件到此，或点击选择文件
+              </div>
+            )}
+            {fileEntries.map((entry, i) => (
+              <div
+                key={entry.id}
+                className={`file-list-item ${dragOverIdx === i ? 'drag-over' : ''} ${dragIdx === i ? 'dragging' : ''}`}
+                draggable
+                onDragStart={(e) => {
+                  setDragIdx(i);
+                  e.dataTransfer.effectAllowed = 'move';
+                  e.stopPropagation();
+                }}
+                onDragOver={(e) => {
+                  e.preventDefault();
+                  e.stopPropagation();
+                  setDragOverIdx(i);
+                }}
+                onDragLeave={(e) => {
+                  e.stopPropagation();
+                  setDragOverIdx(null);
+                }}
+                onDrop={(e) => {
+                  e.preventDefault();
+                  e.stopPropagation();
+                  if (dragIdx === null || dragIdx === i) {
+                    setDragIdx(null);
+                    setDragOverIdx(null);
+                    return;
+                  }
+                  const list = [...fileEntries];
+                  const [removed] = list.splice(dragIdx, 1);
+                  list.splice(i, 0, removed);
+                  setFileEntries(list);
+                  setDragIdx(null);
+                  setDragOverIdx(null);
+                }}
+                onDragEnd={(e) => {
+                  e.stopPropagation();
+                  setDragIdx(null);
+                  setDragOverIdx(null);
+                }}
+              >
+                <span className="file-drag-handle">⠿</span>
+                <span className="file-index">{i + 1}.</span>
+                <span className="file-name">{entry.name}</span>
+                <span className="file-size">{formatSize(entry.size)}</span>
                 <button
                   className="btn-sm btn-danger"
-                  onClick={() => {
-                    if (filePaths.length > 1) {
-                      setFilePaths(filePaths.filter((_, idx) => idx !== i));
-                    }
-                  }}
-                  disabled={filePaths.length <= 1}
+                  onClick={() => setFileEntries(fileEntries.filter((_, idx) => idx !== i))}
                   title="移除"
                 >✕</button>
               </div>
             ))}
           </div>
-          <button
-            className="btn-sm"
-            onClick={() => setFilePaths([...filePaths, ''])}
-          >+ 添加文件</button>
-          <p className="form-hint">按文件从上到下的顺序拼接。最多支持 200 个文件。</p>
+          {fileEntries.length > 0 && (
+            <p className="form-hint">
+              已选择 {fileEntries.length} 个文件。拖拽文件名可调整顺序。共 {formatSize(fileEntries.reduce((s, e) => s + e.size, 0))}。
+              最多 200 个文件。
+            </p>
+          )}
         </div>
 
-        {/* 输出路径 */}
-        <div className="form-group">
-          <label className="form-label" htmlFor="f-output">输出路径（可选）</label>
-          <input
-            id="f-output"
-            type="text"
-            className="form-input"
-            value={output}
-            onChange={e => setFormValues(v => ({ ...v, output: e.target.value }))}
-            placeholder="留空则保存到 ~/Downloads/"
-          />
+        {/* 输出设置 */}
+        <div className="form-group form-row-group">
+          <div className="form-row">
+            <div className="form-row-item">
+              <label className="form-label" htmlFor="f-format">输出格式</label>
+              <select
+                id="f-format"
+                className="form-select"
+                value={outputFormat}
+                onChange={e => setFormValues(v => ({ ...v, output_format: e.target.value }))}
+              >
+                <option value="mp4">MP4 (推荐，最通用)</option>
+                <option value="mov">MOV (QuickTime)</option>
+                <option value="mkv">MKV (Matroska)</option>
+                <option value="webm">WebM (Web)</option>
+                <option value="avi">AVI (兼容老设备)</option>
+              </select>
+            </div>
+            <div className="form-row-item">
+              <label className="form-label" htmlFor="f-resolution">分辨率</label>
+              <select
+                id="f-resolution"
+                className="form-select"
+                value={resolution}
+                onChange={e => setFormValues(v => ({ ...v, resolution: e.target.value }))}
+              >
+                <option value="original">原始分辨率（推荐）</option>
+                <option value="1080p">1080p（全高清）</option>
+                <option value="720p">720p（高清）</option>
+                <option value="480p">480p（标清）</option>
+                <option value="360p">360p（流畅）</option>
+              </select>
+            </div>
+            <div className="form-row-item">
+              <label className="form-label" htmlFor="f-quality">画质</label>
+              <select
+                id="f-quality"
+                className="form-select"
+                value={quality}
+                onChange={e => setFormValues(v => ({ ...v, quality: e.target.value }))}
+              >
+                <option value="low">低 (CRF 28，文件小)</option>
+                <option value="medium">中 (CRF 23，均衡，推荐)</option>
+                <option value="high">高 (CRF 18，画质好)</option>
+              </select>
+            </div>
+          </div>
         </div>
 
-        {/* 质量选择 */}
-        <div className="form-group">
-          <label className="form-label" htmlFor="f-quality">画质</label>
-          <select
-            id="f-quality"
-            className="form-select"
-            value={quality}
-            onChange={e => setFormValues(v => ({ ...v, quality: e.target.value }))}
-          >
-            <option value="low" title="CRF 28，文件较小">low — 低画质</option>
-            <option value="medium" title="CRF 23，较均衡">medium — 中等画质（推荐）</option>
-            <option value="high" title="CRF 18，画质最好">high — 高画质</option>
-          </select>
-          <p className="enum-hint">{
-            quality === 'low' ? '低画质（CRF 28），编码较快，输出文件较小' :
-            quality === 'high' ? '高画质（CRF 18），文件较大，画质最好' :
-            '中等画质（CRF 23），画质与文件大小较均衡'
-          }</p>
-        </div>
+        {/* 输出提示 */}
+        <p className="form-hint" style={{ marginTop: 8 }}>
+          拼接完成后，可通过「保存到本地」按钮将结果下载到你的电脑。
+        </p>
       </>
     );
   }
@@ -484,22 +782,22 @@ export default function ToolExecute(): React.ReactElement | null {
   // ═══════════════════════════════════════
   function renderVideoConcatResult() {
     if (executing) {
-      const pct = Math.round(wsProgress * 100);
+      const pct = Math.min(Math.round(wsProgress * 100), 99);
       return (
         <div className="result-section">
           <div className="result-header"><h3>🎬 正在拼接视频...</h3></div>
           <div className="result-body">
             <div className="progress-bar-container">
               <div className="progress-bar-fill" style={{ width: `${pct}%` }} />
+              <div className="progress-bar-label">{pct > 0 ? `${pct}%` : '准备中...'}</div>
             </div>
-            {wsProgress > 0 && <p className="progress-text">进度：{pct}%</p>}
-            {wsTime && <p className="progress-text">当前时间：{wsTime}</p>}
-            {wsSpeed && <p className="progress-text">速度：{wsSpeed}</p>}
-            <button
-              className="btn btn-danger"
-              onClick={() => cancelRef.current?.()}
-              style={{ marginTop: 12 }}
-            >⏹ 取消</button>
+            <div className="progress-details">
+              {wsTime && <span>当前处理位置：{wsTime}</span>}
+              {wsSpeed && <span>速度：{wsSpeed}</span>}
+            </div>
+            <button className="btn btn-danger" onClick={() => cancelRef.current?.()} style={{ marginTop: 12 }}>
+              ⏹ 取消拼接
+            </button>
           </div>
         </div>
       );
@@ -524,7 +822,11 @@ export default function ToolExecute(): React.ReactElement | null {
       const sizeStr = size > 1024 * 1024
         ? `${(size / (1024 * 1024)).toFixed(2)} MB`
         : `${size} bytes`;
-      const strategy = d.strategy === 'stream-copy' ? '同格式流拷贝（无损）' : 'H.264 重编码';
+      const strategy = d.strategy === 'stream-copy'
+        ? '流拷贝（无损，同格式直接拼接）'
+        : '重编码（H.264，跨格式兼容拼接）';
+      const outPath = (d.output_path as string) || '';
+      const outName = outPath.split('/').pop() || 'output.mp4';
 
       return (
         <div className="result-section result-success">
@@ -532,14 +834,22 @@ export default function ToolExecute(): React.ReactElement | null {
           <div className="result-body">
             <table className="result-table">
               <tbody>
-                <tr><td>输出文件</td><td>{(d.output_path as string) || ''}</td></tr>
                 <tr><td>输入文件数</td><td>{String(d.input_count || 0)}</td></tr>
                 <tr><td>拼接策略</td><td>{strategy}</td></tr>
                 <tr><td>输出大小</td><td>{sizeStr}</td></tr>
                 <tr><td>时长</td><td>{d.output_duration_secs ? `${Number(d.output_duration_secs).toFixed(1)} 秒` : '-'}</td></tr>
-                <tr><td>ffmpeg</td><td>{`${d.ffmpeg_version as string || ''} (${d.ffmpeg_path as string || ''})`}</td></tr>
+                <tr><td>ffmpeg</td><td style={{ fontSize: 12 }}>{`${d.ffmpeg_version as string || ''}`}</td></tr>
               </tbody>
             </table>
+            <div style={{ marginTop: 16 }}>
+              <button
+                className="btn btn-primary"
+                onClick={() => downloadOutput(outPath, outName)}
+                disabled={downloading}
+              >
+                {downloading ? '⏳ 下载中...' : '💾 保存到本地'}
+              </button>
+            </div>
           </div>
         </div>
       );
@@ -552,16 +862,10 @@ export default function ToolExecute(): React.ReactElement | null {
   //  video-concat 执行（使用 WebSocket）
   // ═══════════════════════════════════════
   function handleVideoConcatExecute() {
-    const validPaths = filePaths.filter(p => p.trim());
-    if (validPaths.length === 0) {
-      setExecError('请至少输入一个视频文件路径');
+    const validFiles = fileEntries.filter(e => e.path);
+    if (validFiles.length === 0) {
+      setExecError('请至少添加一个视频文件');
       return;
-    }
-    for (const p of validPaths) {
-      if (!p.startsWith('/') && !p.match(/^[A-Z]:\\/)) {
-        setExecError(`"${p}" 不是绝对路径。请使用完整的文件路径。`);
-        return;
-      }
     }
 
     setExecuting(true);
@@ -587,15 +891,16 @@ export default function ToolExecute(): React.ReactElement | null {
           ws.disconnect();
         }
       },
-      () => {} // ignore status changes
+      () => {}
     );
 
     ws.connect();
 
-    // 给 WS 一点时间连接上
     const timeout = setTimeout(() => {
       const input: Record<string, unknown> = {
-        files: validPaths,
+        files: validFiles.map(e => e.path),
+        output_format: formValues['output_format'] || 'mp4',
+        resolution: formValues['resolution'] || 'original',
         quality: formValues['quality'] || 'medium',
       };
       if (formValues['output']) {
@@ -608,7 +913,6 @@ export default function ToolExecute(): React.ReactElement | null {
     }, 300);
 
     wsRef.current = ws;
-    // 如果用户离开页面，断开 WS
     return () => {
       clearTimeout(timeout);
       ws.disconnect();
@@ -787,6 +1091,52 @@ export default function ToolExecute(): React.ReactElement | null {
 
       {execError && <div className="error-box">{execError}</div>}
       {renderResult()}
+
+      {/* 去重弹窗 */}
+      {dupDialog && (
+        <div className="modal-overlay" onClick={() => setDupDialog(null)}>
+          <div className="modal-box" onClick={e => e.stopPropagation()}>
+            <h3 className="modal-title">⚠️ 有重复文件</h3>
+            <p className="modal-desc">
+              以下 {dupDialog.names.length} 个文件已经存在于列表中：
+            </p>
+            <ul className="modal-dup-list">
+              {dupDialog.names.map(n => <li key={n}>{n}</li>)}
+            </ul>
+            <div className="modal-actions">
+              <button
+                className="btn btn-primary"
+                onClick={() => {
+                  // 跳过重复，只添加新文件
+                  uploadFiles(dupDialog.files, true);
+                }}
+              >跳过重复，只添加新文件</button>
+              <button
+                className="btn"
+                onClick={() => {
+                  // 仍要添加重复文件
+                  setDupDialog(null);
+                  const fileArr = Array.from(dupDialog.files);
+                  (async () => {
+                    const newEntries: FileEntry[] = [];
+                    for (const f of fileArr) {
+                      const entry = await uploadFile(f);
+                      if (entry) newEntries.push(entry);
+                    }
+                    if (newEntries.length > 0) {
+                      setFileEntries(prev => [...prev, ...newEntries]);
+                    }
+                  })();
+                }}
+              >全部添加（含重复）</button>
+              <button
+                className="btn"
+                onClick={() => setDupDialog(null)}
+              >取消</button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
