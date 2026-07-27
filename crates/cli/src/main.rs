@@ -196,6 +196,42 @@ fn format_output(tool_id: &str, result: &Value) {
             info_line("输入长度", format!("{} 字符", get_u64(result, "input_length", 0)));
         }
 
+        "video-concat" => {
+            let success = result.get("success").and_then(|v| v.as_bool()).unwrap_or(false);
+            if success {
+                let out = get_str(result, "output_path", "");
+                let count = get_u64(result, "input_count", 0);
+                let strategy = get_str(result, "strategy", "");
+                let ffmpeg_ver = get_str(result, "ffmpeg_version", "");
+                let ffmpeg_path = get_str(result, "ffmpeg_path", "");
+
+                println!("\n  {}🎬 视频拼接完成{}\n", BOLD, RESET);
+                println!("  {}输出文件:{} {}", GREEN, RESET, out);
+                info_line("输入文件数", count);
+                info_line("拼接策略", &strategy);
+                if let Some(size) = result.get("output_size_bytes").and_then(|v| v.as_u64()) {
+                    let size_str = if size > 1024 * 1024 {
+                        format!("{:.2} MB", size as f64 / (1024.0 * 1024.0))
+                    } else {
+                        format!("{} bytes", size)
+                    };
+                    info_line("输出大小", &size_str);
+                }
+                info_line("ffmpeg 版本", &ffmpeg_ver);
+                info_line("ffmpeg 路径", &ffmpeg_path);
+            } else {
+                let cancelled = result.get("cancelled").and_then(|v| v.as_bool()).unwrap_or(false);
+                if cancelled {
+                    let msg = get_str(result, "message", "用户取消了操作");
+                    println!("\n  {}⏹  视频拼接已取消{}\n", YELLOW, RESET);
+                    info_line("信息", &msg);
+                } else {
+                    println!("\n  {}❌ 视频拼接失败{}\n", RED, RESET);
+                    println!("{}", serde_json::to_string_pretty(result).unwrap());
+                }
+            }
+        }
+
         _ => {
             // 通用兜底：打印完整 JSON
             println!("{}", serde_json::to_string_pretty(result).unwrap());

@@ -7,6 +7,8 @@ pub mod url_codec;
 pub mod text_stats;
 pub mod string_case;
 pub mod hash_tool;
+pub mod ffmpeg_detector;
+pub mod video_concat;
 
 /// 注册所有内置工具到 registry
 pub fn register_all(registry: &mut trove_core::ToolRegistry) {
@@ -22,5 +24,6 @@ pub fn register_all(registry: &mut trove_core::ToolRegistry) {
         .register(url_codec::UrlDecode)
         .register(text_stats::TextStats)
         .register(string_case::StringCase)
-        .register(hash_tool::HashTool);
+        .register(hash_tool::HashTool)
+        .register(video_concat::VideoConcat);
 }

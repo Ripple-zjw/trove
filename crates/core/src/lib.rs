@@ -6,6 +6,6 @@ pub mod execute;
 
 pub use tool::{Tool, ToolCategory, ToolMetadata};
 pub use registry::ToolRegistry;
-pub use context::ToolContext;
+pub use context::{ToolContext, ProgressEvent, CancelToken};
 pub use error::{ToolError, ToolResult};
 pub use execute::ExecuteEngine;

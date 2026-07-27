@@ -22,6 +22,8 @@ pub enum ToolCategory {
     Color,
     /// 图片（后期 B 类工具）
     Image,
+    /// 媒体（音视频处理工具）
+    Media,
     /// 其他/通用
     Utility,
     /// 生产力工具（后期 B 类工具）
@@ -38,6 +40,7 @@ impl ToolCategory {
             ToolCategory::Network => "网络",
             ToolCategory::Color => "颜色",
             ToolCategory::Image => "图片",
+            ToolCategory::Media => "媒体",
             ToolCategory::Utility => "通用",
             ToolCategory::Productivity => "生产力",
         }
@@ -51,9 +54,10 @@ impl ToolCategory {
             ToolCategory::DateTime => 4,
             ToolCategory::Network => 5,
             ToolCategory::Color => 6,
-            ToolCategory::Utility => 7,
-            ToolCategory::Image => 8,
-            ToolCategory::Productivity => 9,
+            ToolCategory::Image => 7,
+            ToolCategory::Media => 8,
+            ToolCategory::Utility => 9,
+            ToolCategory::Productivity => 10,
         }
     }
 }
