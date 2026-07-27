@@ -2,6 +2,7 @@ use std::sync::Arc;
 
 use serde_json::Value;
 use tokio::time::{timeout, Duration};
+use tracing::{error, warn};
 
 use crate::context::ToolContext;
 use crate::error::{ToolError, ToolResult};
@@ -64,10 +65,12 @@ impl ExecuteEngine {
             .map(|s| s.len())
             .unwrap_or(0);
         if input_size > self.max_input_size {
+            warn!("输入过大: tool={}, size={}, max={}", tool.id(), input_size, self.max_input_size);
             return Err(ToolError::InputTooLarge(input_size, self.max_input_size));
         }
 
         let timeout_secs = ctx.timeout_secs;
+        let tool_id = tool.id().to_string();
 
         if tool.is_cpu_intensive() {
             // CPU 密集型工具：在新 tokio task 中执行，避免阻塞其他请求
@@ -80,6 +83,7 @@ impl ExecuteEngine {
                 match task.await {
                     Ok(result) => result,
                     Err(join_err) => {
+                        error!("工具 panicked: tool={}, err={}", tool_id, join_err);
                         Err(ToolError::InternalError(format!("任务 panicked: {}", join_err)))
                     }
                 }
@@ -87,9 +91,13 @@ impl ExecuteEngine {
                 match timeout(Duration::from_secs(timeout_secs), task).await {
                     Ok(Ok(result)) => result,
                     Ok(Err(join_err)) => {
+                        error!("工具 panicked: tool={}, err={}", tool_id, join_err);
                         Err(ToolError::InternalError(format!("任务 panicked: {}", join_err)))
                     }
-                    Err(_elapsed) => Err(ToolError::Timeout(timeout_secs)),
+                    Err(_elapsed) => {
+                        warn!("工具执行超时: tool={}, timeout={}s", tool_id, timeout_secs);
+                        Err(ToolError::Timeout(timeout_secs))
+                    }
                 }
             }
         } else {
@@ -100,7 +108,10 @@ impl ExecuteEngine {
             } else {
                 match timeout(Duration::from_secs(timeout_secs), fut).await {
                     Ok(result) => result,
-                    Err(_elapsed) => Err(ToolError::Timeout(timeout_secs)),
+                    Err(_elapsed) => {
+                        warn!("工具执行超时: tool={}, timeout={}s", tool_id, timeout_secs);
+                        Err(ToolError::Timeout(timeout_secs))
+                    }
                 }
             }
         }

@@ -241,6 +241,7 @@ fn format_output(tool_id: &str, result: &Value) {
 
 #[tokio::main]
 async fn main() {
+    #[cfg(debug_assertions)]
     tracing_subscriber::fmt()
         .with_env_filter(
             tracing_subscriber::EnvFilter::try_from_default_env()
@@ -270,7 +271,7 @@ async fn main() {
             let input_value = if let Some(file_path) = &file {
                 let content = std::fs::read_to_string(file_path)
                     .unwrap_or_else(|e| {
-                        eprintln!("{}✘ 读取文件失败: {}{}", RED, e, RESET);
+                        tracing::error!("读取文件失败: {}", e);
                         std::process::exit(1);
                     });
                 serde_json::from_str(&content).unwrap_or_else(|_| json!({ "input": content }))
@@ -287,7 +288,7 @@ async fn main() {
             match engine.execute(&tool_id, input_value).await {
                 Ok(result) => format_output(&tool_id, &result),
                 Err(e) => {
-                    eprintln!("{}✘ {}{}", RED, e, RESET);
+                    tracing::error!("工具执行失败: {}", e);
                     std::process::exit(1);
                 }
             }

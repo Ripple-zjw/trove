@@ -9,6 +9,7 @@ use tokio::sync::mpsc;
 
 use trove_core::ExecuteEngine;
 use trove_core::CancelToken;
+use tracing::info;
 
 /// WebSocket 消息（客户端 → 服务器）
 #[derive(Debug, Deserialize)]
@@ -58,6 +59,7 @@ pub enum WsResponse {
 ///
 /// 每个 WS 连接独立管理其执行任务的取消和进度推送。
 pub async fn handle_socket(socket: WebSocket, engine: Arc<ExecuteEngine>) {
+    info!("WS 连接已建立");
     let (mut sender, mut receiver) = socket.split();
 
     // 使用 unbounded channel 避免进度事件导致背压
@@ -168,5 +170,6 @@ pub async fn handle_socket(socket: WebSocket, engine: Arc<ExecuteEngine>) {
         }
     }
 
+    info!("WS 连接已关闭");
     recv_task.abort();
 }

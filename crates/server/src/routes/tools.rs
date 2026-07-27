@@ -10,6 +10,7 @@ use axum::{
 };
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
+use tracing::{info, warn};
 
 use trove_core::ToolError;
 
@@ -71,7 +72,10 @@ async fn get_tool(
 ) -> impl IntoResponse {
     match state.engine.registry().get(&id) {
         Ok(tool) => Ok::<_, (StatusCode, Json<ErrorResponse>)>(Json(tool.metadata())),
-        Err(e) => Err(error_response(e)),
+        Err(e) => {
+            warn!("工具未找到: id={}", id);
+            Err(error_response(e))
+        }
     }
 }
 
@@ -81,6 +85,7 @@ async fn execute_tool(
     Path(id): Path<String>,
     Json(req): Json<ExecuteRequest>,
 ) -> impl IntoResponse {
+    info!("执行工具: id={}", id);
     match state.engine.execute(&id, req.input).await {
         Ok(result) => Ok(Json(ExecuteResponse { result })),
         Err(e) => Err(error_response(e)),
